@@ -4,5 +4,8 @@ database.db.bak
 *.log
 .env
 .DS_Store
+*.bak
 uploads/*
 !uploads/.gitkeep
+public/uploads/*
+!public/uploads/.gitkeep
