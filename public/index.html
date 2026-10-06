@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>📚 Minha Biblioteca</title>
+    <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#64748B">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Biblioteca">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { darkMode: 'class' };
+  </script>
+</head>
+<body class="bg-slate-100 dark:bg-slate-900 font-sans text-slate-800 dark:text-slate-100 min-h-screen transition-colors">
+
+  <!-- TELA DE LOGIN/CADASTRO -->
+  <div id="telaAuth" class="fixed inset-0 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center p-5 z-50">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-10 w-full max-w-md">
+      <h1 class="text-3xl font-bold text-center text-slate-800 dark:text-slate-100 mb-6">📚 Minha Biblioteca</h1>
+
+      <div class="flex bg-slate-100 dark:bg-slate-700 rounded-xl p-1 mb-6">
+        <button id="abaLogin" class="flex-1 py-2.5 rounded-lg font-semibold text-indigo-600 bg-white dark:bg-slate-800 shadow-sm transition-all">Entrar</button>
+        <button id="abaCadastro" class="flex-1 py-2.5 rounded-lg font-semibold text-slate-500 dark:text-slate-400 transition-all">Cadastrar</button>
+      </div>
+
+      <form id="formLogin" class="space-y-4">
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Email</label>
+          <input type="email" id="loginEmail" required
+            class="w-full px-4 py-3 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Senha</label>
+          <input type="password" id="loginSenha" required
+            class="w-full px-4 py-3 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-lg transition-colors">Entrar</button>
+        <p class="erro text-red-500 text-sm text-center min-h-[20px]" id="erroLogin"></p>
+      </form>
+
+      <form id="formCadastro" class="space-y-4 hidden">
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Nome</label>
+          <input type="text" id="cadNome" required
+            class="w-full px-4 py-3 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Email</label>
+          <input type="email" id="cadEmail" required
+            class="w-full px-4 py-3 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Senha (mín. 6 caracteres)</label>
+          <input type="password" id="cadSenha" minlength="6" required
+            class="w-full px-4 py-3 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-lg transition-colors">Criar conta</button>
+        <p class="erro text-red-500 text-sm text-center min-h-[20px]" id="erroCadastro"></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- APLICAÇÃO -->
+  <div id="app" class="hidden">
+    <header class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap items-center justify-between gap-3">
+        <h1 class="text-xl sm:text-2xl font-bold" id="tituloBiblioteca">📚 Minha Biblioteca</h1>
+        <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
+          <span id="nomeUsuario" class="text-sm opacity-90 hidden sm:inline"></span>
+          <button id="btnTema" class="bg-slate-600 hover:bg-slate-700 dark:bg-slate-200 dark:hover:bg-white dark:text-slate-800 text-white font-semibold px-3 py-2 rounded-lg transition-colors text-sm shadow-sm" title="Alternar tema">🌙</button>
+          <button id="btnExportar" class="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold px-4 py-2 rounded-lg transition-colors text-sm shadow-sm">📥 CSV</button>
+          <button id="btnBackup" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold px-4 py-2 rounded-lg transition-colors text-sm shadow-sm">💾 Backup</button>
+          <button id="btnStats" class="bg-purple-500 hover:bg-purple-600 text-white font-semibold px-4 py-2 rounded-lg transition-colors text-sm shadow-sm">📊 Stats</button>
+          <button id="btnNovo" class="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-4 py-2 rounded-lg transition-colors text-sm shadow-sm">+ Novo Livro</button>
+          <button id="btnSair" class="bg-red-500 hover:bg-red-600 text-white font-semibold px-3 py-2 rounded-lg transition-colors text-sm">Sair</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <input type="text" id="busca" placeholder="🔍 Buscar por título, autor, ISBN, editora, tag..."
+        class="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all mb-4">
+
+      <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4 mb-4">
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1">Categoria</label>
+            <select id="filtroCategoria" class="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+              <option value="">Todas</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1">Editora</label>
+            <select id="filtroEditora" class="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+              <option value="">Todas</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1">Tag</label>
+            <select id="filtroTag" class="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+              <option value="">Todas</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1">Ano de</label>
+            <input type="number" id="filtroAnoDe" placeholder="1900" class="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1">Ano até</label>
+            <input type="number" id="filtroAnoAte" placeholder="2026" class="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1">Ordenar</label>
+            <select id="ordenar" class="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+              <option value="recentes">Mais recentes</option>
+              <option value="titulo">Título (A-Z)</option>
+              <option value="autor">Autor (A-Z)</option>
+              <option value="ano">Ano (maior)</option>
+              <option value="ano_asc">Ano (menor)</option>
+              <option value="categoria">Categoria</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex gap-2 mt-4">
+          <button id="btnLimparFiltros" class="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-semibold px-4 py-2 rounded-lg transition-colors text-sm">✖ Limpar filtros</button>
+        </div>
+      </div>
+
+      <p id="contadorResultados" class="text-sm text-slate-500 dark:text-slate-400 mb-3"></p>
+    </div>
+
+    <!-- LISTA DE LIVROS -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
+      <div id="lista" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"></div>
+    </main>
+  </div>
+
+  <!-- MODAL DE LIVRO -->
+  <div id="modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-8 relative">
+      <button class="fechar absolute top-4 right-4 text-3xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 leading-none">&times;</button>
+      <h2 id="tituloModal" class="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-6">Novo Livro</h2>
+
+      <form id="formLivro" class="space-y-4">
+        <input type="hidden" id="id">
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Título *</label>
+          <input type="text" id="titulo" required class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Autor *</label>
+          <input type="text" id="autor" required class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">ISBN</label>
+            <input type="text" id="isbn" placeholder="Ex: 9788595086262" class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Ano</label>
+            <input type="number" id="ano" class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Gênero</label>
+            <input type="text" id="genero" class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Editora</label>
+            <input type="text" id="editora" class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Categoria</label>
+          <select id="categoria" class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+            <option value="">Sem categoria</option>
+            <option value="Química">Química</option>
+            <option value="Física">Física</option>
+            <option value="Matemática">Matemática</option>
+            <option value="Biologia">Biologia</option>
+            <option value="Engenharia">Engenharia</option>
+            <option value="Computação">Computação</option>
+            <option value="Medicina">Medicina</option>
+            <option value="Direito">Direito</option>
+            <option value="Literatura">Literatura</option>
+            <option value="História">História</option>
+            <option value="Outros">Outros</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Tags</label>
+          <input type="text" id="tags" placeholder="Ex: organica, vestibular, 1987"
+            class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">💡 Separe as tags por vírgula</p>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Capa (imagem)</label>
+          <input type="file" id="capa" accept="image/*" class="w-full text-sm text-slate-500 dark:text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-indigo-50 dark:file:bg-slate-700 file:text-indigo-700 dark:file:text-indigo-300 file:font-semibold hover:file:bg-indigo-100 cursor-pointer">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Sinopse</label>
+          <textarea id="sinopse" rows="3" class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"></textarea>
+        </div>
+        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-lg transition-colors">Salvar</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL DE ESTATÍSTICAS -->
+  <div id="modalStats" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-8 relative">
+      <button id="fecharStats" class="absolute top-4 right-4 text-3xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 leading-none">&times;</button>
+      <h2 class="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-6">📊 Estatísticas da Biblioteca</h2>
+      <div id="statsResumo" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"></div>
+      <div class="mb-6">
+        <h3 class="text-lg font-bold text-slate-700 dark:text-slate-300 mb-3">📚 Livros por Categoria</h3>
+        <div id="statsCategorias" class="space-y-2"></div>
+      </div>
+      <div class="mb-6">
+        <h3 class="text-lg font-bold text-slate-700 dark:text-slate-300 mb-3">🏢 Top 5 Editoras</h3>
+        <div id="statsEditoras" class="space-y-2"></div>
+      </div>
+      <div class="mb-6">
+        <h3 class="text-lg font-bold text-slate-700 dark:text-slate-300 mb-3">🏷️ Top 5 Gêneros</h3>
+        <div id="statsGeneros" class="space-y-2"></div>
+      </div>
+      <div class="mb-6">
+        <h3 class="text-lg font-bold text-slate-700 dark:text-slate-300 mb-3">📅 Livros por Década</h3>
+        <div id="statsDecadas" class="space-y-2"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE BACKUP -->
+  <div id="modalBackup" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-8 relative">
+      <button id="fecharBackup" class="absolute top-4 right-4 text-3xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 leading-none">&times;</button>
+      <h2 class="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-6">💾 Backup e Restauração</h2>
+
+      <div class="bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 mb-4">
+        <h3 class="font-bold text-emerald-700 dark:text-emerald-400 mb-2">📥 Exportar</h3>
+        <p class="text-sm text-slate-600 dark:text-slate-400 mb-3">
+          Baixa um arquivo <strong>.json</strong> com todos os seus livros. Guarde em local seguro.
+        </p>
+        <button id="btnExportarBackup" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2 rounded-lg transition-colors">
+          📥 Baixar backup
+        </button>
+      </div>
+
+      <div class="bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 rounded-xl p-4 mb-4">
+        <h3 class="font-bold text-indigo-700 dark:text-indigo-400 mb-2">📂 Restaurar</h3>
+        <p class="text-sm text-slate-600 dark:text-slate-400 mb-3">
+          Importa livros de um arquivo de backup. Livros existentes (mesmo título, autor e ano) <strong>não serão duplicados</strong>.
+        </p>
+        <input type="file" id="inputBackup" accept=".json,application/json" class="hidden">
+        <button id="btnEscolherBackup" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 rounded-lg transition-colors">
+          📂 Escolher arquivo
+        </button>
+        <p id="statusBackup" class="text-sm mt-3 min-h-[20px] text-center"></p>
+      </div>
+
+      <div class="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-xl p-3">
+        <p class="text-xs text-emerald-700 dark:text-emerald-400">
+  ✅ <strong>Boa notícia:</strong> as capas são incluídas em <strong>Base64</strong>. O arquivo pode ficar grande (dezenas de MB).
+</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+    <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(reg => console.log('✅ Service Worker registrado'))
+          .catch(err => console.log('❌ Erro ao registrar SW:', err));
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,462 @@
+const fs = require('fs');
+const express = require('express');
+const sqlite3 = require('sqlite3').verbose();
+const multer = require('multer');
+const path = require('path');
+const cors = require('cors');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const cookieParser = require('cookie-parser');
+
+const app = express();
+const PORT = 3000;
+const SEGREDO_JWT = 'troque-este-segredo-por-algo-grande-e-aleatorio-123456';
+
+app.use(cors({ origin: true, credentials: true }));
+app.use(express.json());
+app.use(cookieParser());
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, 'public/uploads/'),
+  filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
+});
+const upload = multer({ storage });
+
+const db = new sqlite3.Database('./database.db');
+
+db.run(`CREATE TABLE IF NOT EXISTS usuarios (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  nome TEXT NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  senha TEXT NOT NULL,
+  criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+
+db.run(`CREATE TABLE IF NOT EXISTS livros (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  usuario_id INTEGER NOT NULL,
+  titulo TEXT NOT NULL,
+  autor TEXT NOT NULL,
+  isbn TEXT,
+  ano INTEGER,
+  genero TEXT,
+  categoria TEXT,
+  editora TEXT,
+  tags TEXT,
+  capa TEXT,
+  sinopse TEXT,
+  criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+
+// Migrações (adicionam colunas se não existirem)
+db.run(`ALTER TABLE livros ADD COLUMN categoria TEXT`, () => {});
+db.run(`ALTER TABLE livros ADD COLUMN editora TEXT`, () => {});
+db.run(`ALTER TABLE livros ADD COLUMN tags TEXT`, () => {});
+
+function autenticar(req, res, next) {
+  const token = req.cookies.token;
+  if (!token) return res.status(401).json({ erro: 'Não autenticado' });
+  try {
+    const dados = jwt.verify(token, SEGREDO_JWT);
+    req.usuarioId = dados.id;
+    next();
+  } catch (err) {
+    return res.status(401).json({ erro: 'Token inválido' });
+  }
+}
+
+// ============ AUTENTICAÇÃO ============
+app.post('/api/auth/cadastro', async (req, res) => {
+  const { nome, email, senha } = req.body;
+  if (!nome || !email || !senha) return res.status(400).json({ erro: 'Preencha todos os campos' });
+  if (senha.length < 6) return res.status(400).json({ erro: 'Senha mínima de 6 caracteres' });
+
+  try {
+    const hash = await bcrypt.hash(senha, 10);
+    db.run('INSERT INTO usuarios (nome, email, senha) VALUES (?, ?, ?)',
+      [nome, email.toLowerCase(), hash],
+      function (err) {
+        if (err) {
+          if (err.message.includes('UNIQUE')) return res.status(400).json({ erro: 'Email já cadastrado' });
+          return res.status(500).json({ erro: err.message });
+        }
+        const token = jwt.sign({ id: this.lastID }, SEGREDO_JWT, { expiresIn: '7d' });
+        res.cookie('token', token, { httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 });
+        res.json({ id: this.lastID, nome, email });
+      });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/auth/login', (req, res) => {
+  const { email, senha } = req.body;
+  db.get('SELECT * FROM usuarios WHERE email = ?', [email.toLowerCase()], async (err, u) => {
+    if (err) return res.status(500).json({ erro: err.message });
+    if (!u) return res.status(401).json({ erro: 'Email ou senha incorretos' });
+    const ok = await bcrypt.compare(senha, u.senha);
+    if (!ok) return res.status(401).json({ erro: 'Email ou senha incorretos' });
+    const token = jwt.sign({ id: u.id }, SEGREDO_JWT, { expiresIn: '7d' });
+    res.cookie('token', token, { httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 });
+    res.json({ id: u.id, nome: u.nome, email: u.email });
+  });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  res.clearCookie('token');
+  res.json({ mensagem: 'Logout realizado' });
+});
+
+app.get('/api/auth/eu', autenticar, (req, res) => {
+  db.get('SELECT id, nome, email FROM usuarios WHERE id = ?', [req.usuarioId], (err, u) => {
+    if (err || !u) return res.status(401).json({ erro: 'Usuário não encontrado' });
+    res.json(u);
+  });
+});
+
+// ============ LIVROS ============
+app.get('/api/livros', autenticar, (req, res) => {
+  const busca = req.query.busca || '';
+  const categoria = req.query.categoria || '';
+  const editora = req.query.editora || '';
+  const tag = req.query.tag || '';
+  const anoDe = req.query.anoDe || '';
+  const anoAte = req.query.anoAte || '';
+  const ordenar = req.query.ordenar || 'recentes';
+  const termo = `%${busca}%`;
+
+  const ordens = {
+    'recentes': 'id DESC', 'titulo': 'titulo ASC', 'autor': 'autor ASC',
+    'ano': 'ano DESC', 'ano_asc': 'ano ASC', 'categoria': 'categoria ASC'
+  };
+  const ordemSQL = ordens[ordenar] || 'id DESC';
+
+  let sql = `SELECT * FROM livros WHERE usuario_id = ?`;
+  const params = [req.usuarioId];
+
+  if (busca) {
+    sql += ` AND (titulo LIKE ? OR autor LIKE ? OR genero LIKE ? OR categoria LIKE ? OR isbn LIKE ? OR editora LIKE ? OR tags LIKE ?)`;
+    params.push(termo, termo, termo, termo, termo, termo, termo);
+  }
+  if (categoria) { sql += ` AND categoria = ?`; params.push(categoria); }
+  if (editora) { sql += ` AND editora = ?`; params.push(editora); }
+  if (tag) { sql += ` AND tags LIKE ?`; params.push(`%${tag}%`); }
+  if (anoDe) { sql += ` AND ano >= ?`; params.push(Number(anoDe)); }
+  if (anoAte) { sql += ` AND ano <= ?`; params.push(Number(anoAte)); }
+
+  sql += ` ORDER BY ${ordemSQL}`;
+
+  db.all(sql, params, (err, rows) => {
+    if (err) return res.status(500).json({ erro: err.message });
+    res.json(rows);
+  });
+});
+
+app.get('/api/livros/:id', autenticar, (req, res) => {
+  db.get('SELECT * FROM livros WHERE id = ? AND usuario_id = ?', [req.params.id, req.usuarioId], (err, row) => {
+    if (!row) return res.status(404).json({ erro: 'Livro não encontrado' });
+    res.json(row);
+  });
+});
+
+app.post('/api/livros', autenticar, upload.single('capa'), (req, res) => {
+  const { titulo, autor, isbn, ano, genero, categoria, editora, sinopse, tags } = req.body;
+  const capa = req.file ? `/uploads/${req.file.filename}` : null;
+  db.run(
+    `INSERT INTO livros (usuario_id, titulo, autor, isbn, ano, genero, categoria, editora, capa, sinopse, tags)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [req.usuarioId, titulo, autor, isbn, ano, genero, categoria, editora, capa, sinopse, tags],
+    function (err) {
+      if (err) return res.status(500).json({ erro: err.message });
+      res.json({ id: this.lastID });
+    });
+});
+
+app.put('/api/livros/:id', autenticar, upload.single('capa'), (req, res) => {
+  const { titulo, autor, isbn, ano, genero, categoria, editora, sinopse, tags } = req.body;
+  const { id } = req.params;
+  db.get('SELECT capa FROM livros WHERE id = ? AND usuario_id = ?', [id, req.usuarioId], (err, row) => {
+    if (!row) return res.status(404).json({ erro: 'Livro não encontrado' });
+    const capa = req.file ? `/uploads/${req.file.filename}` : row.capa;
+    db.run(
+      `UPDATE livros SET titulo=?, autor=?, isbn=?, ano=?, genero=?, categoria=?, editora=?, capa=?, sinopse=?, tags=?
+       WHERE id=? AND usuario_id=?`,
+      [titulo, autor, isbn, ano, genero, categoria, editora, capa, sinopse, tags, id, req.usuarioId],
+      (err) => {
+        if (err) return res.status(500).json({ erro: err.message });
+        res.json({ mensagem: 'Atualizado' });
+      });
+  });
+});
+
+app.delete('/api/livros/:id', autenticar, (req, res) => {
+  db.run('DELETE FROM livros WHERE id = ? AND usuario_id = ?', [req.params.id, req.usuarioId], function (err) {
+    if (err) return res.status(500).json({ erro: err.message });
+    res.json({ mensagem: 'Removido' });
+  });
+});
+
+// ============ FILTROS ============
+app.get('/api/categorias', autenticar, (req, res) => {
+  db.all(
+    `SELECT DISTINCT categoria FROM livros
+     WHERE usuario_id = ? AND categoria IS NOT NULL AND categoria != ''
+     ORDER BY categoria ASC`,
+    [req.usuarioId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ erro: err.message });
+      res.json(rows.map(r => r.categoria));
+    }
+  );
+});
+
+app.get('/api/editoras', autenticar, (req, res) => {
+  db.all(
+    `SELECT DISTINCT editora FROM livros
+     WHERE usuario_id = ? AND editora IS NOT NULL AND editora != ''
+     ORDER BY editora ASC`,
+    [req.usuarioId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ erro: err.message });
+      res.json(rows.map(r => r.editora));
+    }
+  );
+});
+
+app.get('/api/tags', autenticar, (req, res) => {
+  db.all(
+    `SELECT tags FROM livros WHERE usuario_id = ? AND tags IS NOT NULL AND tags != ''`,
+    [req.usuarioId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ erro: err.message });
+      const todasTags = new Set();
+      rows.forEach(r => {
+        (r.tags || '').split(',').forEach(t => {
+          const limpa = t.trim();
+          if (limpa) todasTags.add(limpa);
+        });
+      });
+      res.json([...todasTags].sort());
+    }
+  );
+});
+
+// ============ EXPORTAR CSV ============
+app.get('/api/exportar/csv', autenticar, (req, res) => {
+  db.all(
+    `SELECT titulo, autor, isbn, ano, categoria, genero, editora, tags, sinopse, criado_em
+     FROM livros WHERE usuario_id = ? ORDER BY id DESC`,
+    [req.usuarioId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ erro: err.message });
+
+      const cabecalho = ['Título', 'Autor', 'ISBN', 'Ano', 'Categoria', 'Gênero', 'Editora', 'Tags', 'Sinopse', 'Cadastrado em'];
+      function escapar(v) {
+        if (v === null || v === undefined) return '';
+        const s = String(v).replace(/"/g, '""');
+        if (s.includes(';') || s.includes(',') || s.includes('"') || s.includes('\n')) return `"${s}"`;
+        return s;
+      }
+      const linhas = rows.map(r => [
+        escapar(r.titulo), escapar(r.autor), escapar(r.isbn), escapar(r.ano),
+        escapar(r.categoria), escapar(r.genero), escapar(r.editora),
+        escapar(r.tags), escapar(r.sinopse), escapar(r.criado_em)
+      ].join(';'));
+
+      const bom = '\uFEFF';
+      const csv = bom + cabecalho.join(';') + '\n' + linhas.join('\n');
+      const hoje = new Date().toISOString().slice(0, 10);
+
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="minha-biblioteca-${hoje}.csv"`);
+      res.send(csv);
+    }
+  );
+});
+
+// ============ ESTATÍSTICAS ============
+app.get('/api/estatisticas', autenticar, (req, res) => {
+  const uid = req.usuarioId;
+
+  db.get(`
+    SELECT
+      COUNT(*) as total,
+      COUNT(DISTINCT genero) as total_generos,
+      COUNT(DISTINCT editora) as total_editoras,
+      MIN(ano) as ano_min,
+      MAX(ano) as ano_max
+    FROM livros WHERE usuario_id = ?
+  `, [uid], (err, resumo) => {
+    if (err) return res.status(500).json({ erro: err.message });
+
+    db.all(`SELECT COALESCE(NULLIF(categoria, ''), 'Sem categoria') as categoria, COUNT(*) as total
+            FROM livros WHERE usuario_id = ? GROUP BY categoria ORDER BY total DESC LIMIT 10`,
+      [uid], (err, porCategoria) => {
+        if (err) return res.status(500).json({ erro: err.message });
+
+        db.all(`SELECT editora, COUNT(*) as total FROM livros
+                WHERE usuario_id = ? AND editora IS NOT NULL AND editora != ''
+                GROUP BY editora ORDER BY total DESC LIMIT 5`,
+          [uid], (err, porEditora) => {
+            if (err) return res.status(500).json({ erro: err.message });
+
+            db.all(`SELECT genero, COUNT(*) as total FROM livros
+                    WHERE usuario_id = ? AND genero IS NOT NULL AND genero != ''
+                    GROUP BY genero ORDER BY total DESC LIMIT 5`,
+              [uid], (err, porGenero) => {
+                if (err) return res.status(500).json({ erro: err.message });
+
+                db.all(`SELECT (ano / 10) * 10 as decada, COUNT(*) as total FROM livros
+                        WHERE usuario_id = ? AND ano IS NOT NULL AND ano > 0
+                        GROUP BY decada ORDER BY decada DESC LIMIT 8`,
+                  [uid], (err, porDecada) => {
+                    if (err) return res.status(500).json({ erro: err.message });
+                    res.json({ resumo, porCategoria, porEditora, porGenero, porDecada });
+                  });
+              });
+          });
+      });
+  });
+});
+
+// ============ BACKUP E RESTAURAÇÃO ============
+
+// Exportar backup completo
+
+// Exportar backup com imagens em Base64
+app.get('/api/backup/exportar', autenticar, (req, res) => {
+  db.all(
+    `SELECT titulo, autor, isbn, ano, genero, categoria, editora, tags, sinopse, capa
+     FROM livros WHERE usuario_id = ? ORDER BY id ASC`,
+    [req.usuarioId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ erro: err.message });
+
+      db.get(
+        'SELECT nome, email FROM usuarios WHERE id = ?',
+        [req.usuarioId],
+        (err, usuario) => {
+          if (err) return res.status(500).json({ erro: err.message });
+
+          // Processa cada livro, incluindo a imagem em Base64
+          const livrosComImagem = rows.map(l => {
+            const livro = { ...l, capa_base64: null, capa_extensao: null };
+
+            if (l.capa) {
+              // Remove o "/uploads/" para pegar só o nome do arquivo
+              const nomeArquivo = l.capa.replace('/uploads/', '');
+              const caminho = path.join(__dirname, 'public', 'uploads', nomeArquivo);
+
+              try {
+                if (fs.existsSync(caminho)) {
+                  const buffer = fs.readFileSync(caminho);
+                  livro.capa_base64 = buffer.toString('base64');
+                  livro.capa_extensao = path.extname(nomeArquivo); // .jpg, .png, etc
+                }
+              } catch (e) {
+                console.log('⚠️ Erro ao ler capa:', nomeArquivo, e.message);
+              }
+            }
+
+            // Remove o caminho antigo (vai ser gerado novo na importação)
+            delete livro.capa;
+            return livro;
+          });
+
+          const backup = {
+            versao: 2,
+            exportado_em: new Date().toISOString(),
+            usuario: { nome: usuario.nome, email: usuario.email },
+            total_livros: livrosComImagem.length,
+            com_imagens: true,
+            livros: livrosComImagem
+          };
+
+          const hoje = new Date().toISOString().slice(0, 10);
+          const nomeArquivo = `biblioteca-backup-${hoje}.json`;
+
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`);
+          res.send(JSON.stringify(backup));
+        }
+      );
+    }
+  );
+});
+
+// Importar backup
+// Importar backup (com imagens)
+app.post('/api/backup/importar', autenticar, (req, res) => {
+  const { livros } = req.body;
+
+  if (!Array.isArray(livros)) {
+    return res.status(400).json({ erro: 'Formato inválido. Esperado array "livros".' });
+  }
+
+  if (livros.length === 0) {
+    return res.status(400).json({ erro: 'Nenhum livro no arquivo.' });
+  }
+
+  let inseridos = 0;
+  let duplicados = 0;
+  let erros = 0;
+
+  const processar = (index) => {
+    if (index >= livros.length) {
+      return res.json({ mensagem: 'Importação concluída', inseridos, duplicados, erros, total: livros.length });
+    }
+
+    const l = livros[index];
+
+    db.get(
+      `SELECT id FROM livros WHERE usuario_id = ? AND titulo = ? AND autor = ? AND COALESCE(ano, 0) = COALESCE(?, 0)`,
+      [req.usuarioId, l.titulo, l.autor, l.ano],
+      (err, existente) => {
+        if (err) { erros++; return processar(index + 1); }
+        if (existente) { duplicados++; return processar(index + 1); }
+
+        // Salva a imagem (se existir)
+        let caminhoCapa = null;
+
+        if (l.capa_base64) {
+          try {
+            const extensao = l.capa_extensao || '.jpg';
+            const nomeArquivo = `capa_${Date.now()}_${Math.floor(Math.random() * 10000)}${extensao}`;
+            const caminho = path.join(__dirname, 'public', 'uploads', nomeArquivo);
+            const buffer = Buffer.from(l.capa_base64, 'base64');
+            fs.writeFileSync(caminho, buffer);
+            caminhoCapa = `/uploads/${nomeArquivo}`;
+          } catch (e) {
+            console.log('⚠️ Erro ao salvar imagem:', e.message);
+          }
+        }
+
+        db.run(
+          `INSERT INTO livros (usuario_id, titulo, autor, isbn, ano, genero, categoria, editora, tags, sinopse, capa)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [req.usuarioId, l.titulo || '', l.autor || '', l.isbn || '', l.ano || null,
+           l.genero || '', l.categoria || '', l.editora || '', l.tags || '', l.sinopse || '',
+           caminhoCapa],
+          function (err2) {
+            if (err2) { erros++; } else { inseridos++; }
+            processar(index + 1);
+          }
+        );
+      }
+    );
+  };
+
+  processar(0);
+});
+
+
+
+// ============ ESTÁTICOS (DEPOIS das rotas de API) ============
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
+
+
+
+app.listen(PORT, () => {
+  console.log(`✅ Servidor rodando em http://localhost:${PORT}`);
+});
